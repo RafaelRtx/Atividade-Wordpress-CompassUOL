@@ -9,6 +9,12 @@ Este projeto consiste no deploy de uma aplicação Wordpress utilizando serviço
 
 ---
 
+## **Arquitetura do Projeto**
+
+![Arquitetura do Projeto](img/diagrama.png)
+
+---
+
 ## **Passo-a-Passo**
 
 ### **1. Criar uma Instância EC2 com Docker via User Data**
