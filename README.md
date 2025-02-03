@@ -57,7 +57,24 @@ sudo chmod +x /usr/local/bin/docker-compose
 
 ---
 
-### **3. Configurar o Docker Compose para Wordpress**
+#### **3. Montar o EFS na Instância EC2**
+#### **Configuração do EFS**
+1. No console AWS, vá para **Elastic File System (EFS)** e clique em **Create File System**.
+2. Configure permissões e sub-redes para permitir acesso à instância EC2.
+
+3. Instale os utilitários EFS:
+   ```bash
+   sudo yum install -y amazon-efs-utils
+   ```
+4. Monte o EFS:
+   ```bash
+   sudo mkdir -p /efs
+   sudo mount -t efs <EFS_ID>: /efs
+   ```
+
+---
+
+### **4. Configurar o Docker Compose para Wordpress**
 
 #### **Arquivo `docker-compose.yml`**
 Na instância EC2, crie o arquivo `docker-compose.yml` com o seguinte conteúdo:
@@ -78,10 +95,6 @@ services:
       WORDPRESS_DB_NAME: wordpress
     volumes:
       - wordpress_data:/var/www/html
-
-volumes:
-  wordpress_data:
-    driver: local
 ```
 
 Substitua os valores `<RDS_ENDPOINT>`, `<DB_USER>` e `<DB_PASSWORD>` com as informações do banco de dados.
@@ -98,44 +111,13 @@ Substitua os valores `<RDS_ENDPOINT>`, `<DB_USER>` e `<DB_PASSWORD>` com as info
 
 ---
 
-### **4. Configurar o EFS para Arquivos Estáticos**
-
-#### **Configuração do EFS**
-1. No console AWS, vá para **Elastic File System (EFS)** e clique em **Create File System**.
-2. Configure permissões e sub-redes para permitir acesso à instância EC2.
-
-#### **Montar o EFS na Instância EC2**
-1. Instale os utilitários EFS:
-   ```bash
-   sudo yum install -y amazon-efs-utils
-   ```
-2. Monte o EFS:
-   ```bash
-   sudo mkdir -p /mnt/efs
-   sudo mount -t efs <EFS_ID>:/ /mnt/efs
-   ```
-
-#### **Atualizar o `docker-compose.yml` para usar o EFS**
-
-```yaml
-volumes:
-  wordpress_data:
-    driver_opts:
-      type: "nfs"
-      o: "addr=<EFS_ENDPOINT>,rw"
-      device: ":/"
-```
-
-Substitua `<EFS_ENDPOINT>` pelo endpoint do sistema de arquivos.
-
----
-
 ### **5. Configurar o Load Balancer**
 
 1. Vá para **Load Balancers** no console AWS e clique em **Create Load Balancer**.
-2. Escolha o **Classic Load Balancer**.
-3. Configure o listener na porta 80 e adicione a instância EC2 ao target group.
-4. Finalize a criação.
+2. Escolha o **Classic Load Balancer, ou Application Load Balancer.**.
+3. Crie um Target Group incluindo as instancias EC2 desejadas.
+4. Configure o listener na porta 80 e adicione a instância EC2 ao target group.
+5. Finalize a criação.
 
 ---
 
@@ -168,24 +150,15 @@ Substitua `<EFS_ENDPOINT>` pelo endpoint do sistema de arquivos.
 
 ---
 
-## **Comandos Úteis**
+## **Configurações adicionais importantes**
+Por natureza, o wordpress redireciona o acesso da rota **/wp-admin/**
+para o IP da primeira máquina onde foi feita a instalação da mesma,
+criando um comportamento indesejado onde a página do admnistrador é sempre
+acessada pela mesma instância, e caso essa instância esteja deseligada,
+retornará um erro de conexão. Para evitar esse comportamento, adicione
+as seguintes linhas no arquivo **wp-config.php:**
 
-### **Verificar Containers Docker**
-```bash
-docker ps
-```
-
-### **Verificar Logs do Container**
-```bash
-docker logs wordpress
-```
-
-### **Testar Montagem do EFS**
-```bash
-ls /mnt/efs
-```
-
----
-
-## **Conclusão**
-Este projeto integra serviços da AWS para criar um ambiente escalável e robusto para aplicações Wordpress. Certifique-se de monitorar o uso de recursos e ajustar as configurações conforme necessário para otimizar custos e desempenho.
+   ```
+   define('WP_HOME', 'http://meu-load-balancer');
+   define('WP_SITEURL', 'http://meu-load-balancer');
+   ```
