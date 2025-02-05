@@ -89,7 +89,7 @@ Dessa forma, suas instâncias privadas terão acesso à internet.
    - **Tipo:** `t3.medium`
    - **VPC:** `MinhaVPC`
    - **Subnet:** `SubnetPrivada-1`
-   - **Security Group:** Permitir **porta 22 (SSH)** e **2049 (EFS)**
+   - **Security Group:** Permitir **porta 22 (SSH)**, **2049 (EFS)**, **80 (HTTP)** e **3306 (MySQL)**
    - **User Data:** Preencha o campo User Data com o seguinte código:
 ```
 #!/bin/bash
