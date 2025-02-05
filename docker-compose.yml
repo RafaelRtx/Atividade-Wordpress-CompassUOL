@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  wordpress:
+    image: wordpress:latest
+    ports:
+      - "80:80"
+    environment:
+      WORDPRESS_DB_HOST: ${DATABASE_URL}
+      WORDPRESS_DB_USER: ${DATABASE_USER}
+      WORDPRESS_DB_PASSWORD: ${DATABASE_PASSWORD}
+      WORDPRESS_DB_NAME: ${DATABASE_NAME}
+    volumes:
+      - /efs/wordpress:/var/www/html
+    restart: always

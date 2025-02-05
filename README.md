@@ -15,70 +15,102 @@ Este projeto consiste no deploy de uma aplicação Wordpress utilizando serviço
 
 ---
 
-## **Passo-a-Passo**
+### 1️⃣ Criar uma VPC com 2 Subnets Públicas e Privadas
+1. No **AWS Console**, acesse **VPC** e clique em **Criar VPC**.
+2. Escolha a opção **VPC Only** e configure:
+   - **Nome:** `MinhaVPC`
+   - **CIDR Block:** `x.x.x.x/x`
+   - **Ativar DNS Hostnames:** Sim
+3. Clique em **Criar VPC**.
 
-### **1. Criar uma Instância EC2 com Docker via User Data**
+#### Criando Subnets
+1. Ainda em **VPC**, vá para **Subnets** e clique em **Criar Subnet**.
+2. Selecione a **VPC recém-criada**.
+3. Crie **duas Subnets Públicas**:
+   - **Nome:** `SubnetPublica-1`, **CIDR:** `x.x.x.x/x`, **AZ:** `us-east-1a`
+   - **Nome:** `SubnetPublica-2`, **CIDR:** `x.x.x.x/x`, **AZ:** `us-east-1b`
+4. Crie **duas Subnets Privadas**:
+   - **Nome:** `SubnetPrivada-1`, **CIDR:** `x.x.x.x/x`, **AZ:** `us-east-1a`
+   - **Nome:** `SubnetPrivada-2`, **CIDR:** `x.x.x.x/x`, **AZ:** `us-east-1b`
 
-#### **Script de User Data**
-Configure o script abaixo para instalar e configurar Docker automaticamente na inicialização:
+#### Crie um Internet Gateway
+1. Vá para **Internet Gateways** e clique em **Criar IGW**.
+2. Nomeie como `MeuIGW` e clique em **Criar**.
+3. Associe o IGW à **MinhaVPC**.
 
-```bash
-#!/bin/bash
-sudo yum update -y
-sudo yum install -y docker
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker ec2-user
+#### Crie um NAT Gateway
+1. Vá para **NAT Gateways** e clique em **Criar NAT Gateway**.
+2. Escolha a **SubnetPublica-1**.
+3. Aloque um **Elastic IP** e crie o NAT Gateway.
+4. Repita o processo para a **SubnetPublica-2**.
 
-# Instalar Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/download/2.17.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
+#### Configurar Tabelas de Rotas
+1. Vá para **Route Tables** e clique em **Criar Tabela de Rotas**.
+2. Para **Subnets Públicas**:
+   - Nome: `TabelaPublica`
+   - Adicione a Rota: `0.0.0.0/0 → Internet Gateway (MeuIGW)`
+3. Para **Subnets Privadas**:
+   - Nome: `TabelaPrivada`
+   - Adicione a Rota: `0.0.0.0/0 → NAT Gateway`
 
-#### **Etapas no Console AWS:**
-1. Vá para o serviço **EC2** e clique em **Launch Instance**.
-2. Escolha uma AMI (Amazon Linux 2).
-3. Configure o tamanho da instância (e.g., `t2.micro`).
-4. No campo “Advanced Details”, cole o script acima no campo **User Data**.
-5. Finalize a criação da instância.
+Dessa forma, suas instâncias privadas terão acesso à internet.
 
 ---
 
-### **2. Criar Banco de Dados MySQL no RDS**
-1. Acesse o serviço **RDS** no console AWS.
-2. Clique em **Create Database** e configure:
-   - **Engine:** MySQL.
-   - **Instance Class:** `db.t2.micro`.
-   - **DB Name:** `wordpress`.
-   - **Username:** `admin`.
-   - **Password:** `password`.
-3. Configure as sub-redes e finalize a criação.
-4. Copie o endpoint do banco de dados para usar na configuração do Wordpress.
+### 2️⃣ Criar um Banco de Dados RDS MySQL
+1. Vá para **RDS** > **Databases** e clique em **Criar Banco de Dados**.
+2. Escolha **Standard Create** e o **Motor MySQL**.
+3. Configure:
+   - **Nome da Instância:** `WordPressDB`
+   - **Versão:** `MySQL 8.x`
+   - **Usuário Admin:** `admin`
+   - **Senha:** sua senha
+   - **Classe da Instância:** `db.t3.micro`
+   - **Storage:** 20GB
+   - **VPC:** `MinhaVPC`
+   - **Subnets:** Selecione as **Subnets Privadas**
+4. Desative o acesso público e clique em **Criar**.
 
 ---
 
-#### **3. Montar o EFS na Instância EC2**
-#### **Configuração do EFS**
-1. No console AWS, vá para **Elastic File System (EFS)** e clique em **Create File System**.
-2. Configure permissões e sub-redes para permitir acesso à instância EC2.
+### 3️⃣ Criar um Volume EFS
+1. Vá para **EFS** e clique em **Criar Sistema de Arquivos**.
+2. Nomeie como `MeuEFS`.
+3. Selecione a **VPC `MinhaVPC`** e configure o **Mount Target** para cada **Subnet Privada**.
+4. Clique em **Criar**.
 
-3. Instale os utilitários EFS:
-   ```bash
-   sudo yum install -y amazon-efs-utils
+---
+
+### 4️⃣ Criar uma Instância EC2 com Docker e EFS
+1. Vá para **EC2 > Instâncias** e clique em **Launch Instance**.
+2. Escolha **Amazon Linux 2** ou **Ubuntu**.
+3. Defina:
+   - **Nome:** `MinhaInstancia`
+   - **Tipo:** `t3.medium`
+   - **VPC:** `MinhaVPC`
+   - **Subnet:** `SubnetPrivada-1`
+   - **Security Group:** Permitir **porta 22 (SSH)** e **2049 (EFS)**
+   - **User Data:** Preencha o campo User Data com o seguinte código:
    ```
-4. Monte o EFS:
-   ```bash
-   sudo mkdir -p /efs
-   sudo mount -t efs <EFS_ID>: /efs
+      #!/bin/bash
+      yum update -y
+      amazon-linux-extras enable docker
+      yum install -y docker
+      service docker start
+      usermod -a -G docker ec2-user
+      sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+      sudo chmod +x /usr/local/bin/docker-compose
+      systemctl enable Docker
+      yum -y install amazon-efs-utils
    ```
+4. Clique em **Launch**.
 
 ---
 
-### **4. Configurar o Docker Compose para Wordpress**
-
-#### **Arquivo `docker-compose.yml`**
-Na instância EC2, crie o arquivo `docker-compose.yml` com o seguinte conteúdo:
-
+### 5️⃣ Criar e Executar o Docker-Compose
+1. Acesse a instância via SSH e crie o diretório `/efs`.
+2. Monte o volume EFS.
+3. No `/efs`, crie um `docker-compose.yml` com a imagem do WordPress.
 ```yaml
 version: '3.7'
 
@@ -96,69 +128,49 @@ services:
     volumes:
       - wordpress_data:/var/www/html
 ```
-
-Substitua os valores `<RDS_ENDPOINT>`, `<DB_USER>` e `<DB_PASSWORD>` com as informações do banco de dados.
-
-#### **Executar o Docker Compose**
-1. Suba o container com o comando:
-   ```bash
-   docker-compose up -d
-   ```
-2. Verifique se o container está rodando:
-   ```bash
-   docker ps
-   ```
+4. Execute `docker-compose up -d` para iniciar os containers.
 
 ---
 
-### **5. Configurar o Load Balancer**
+### 6️⃣ Criar um Auto Scaling Group
+1. Vá para **EC2 > Auto Scaling Groups**.
+2. Clique em **Create Auto Scaling Group**.
+3. Escolha:
+   - **Launch Template:** Crie um Launch template com os mesmo dados da instância EC2 criada anteriormente, com o seguinte user data:
+         ```
+         #!/bin/bash
+         yum update -y
+         amazon-linux-extras enable docker
+         yum install -y docker
+         service docker start
+         usermod -a -G docker ec2-user
+         sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+         sudo chmod +x /usr/local/bin/docker-compose
+         systemctl enable Docker
+         cd /
+         mkdir efs
+         sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport {ID do seu EFS}.efs.us-east-1.amazonaws.com:/ efs
+         cd efs
+         docker-compose up
 
-1. Vá para **Load Balancers** no console AWS e clique em **Create Load Balancer**.
-2. Escolha o **Classic Load Balancer, ou Application Load Balancer.**.
-3. Crie um Target Group incluindo as instancias EC2 desejadas.
-4. Configure o listener na porta 80 e adicione a instância EC2 ao target group.
+         ```
+   - **VPC:** `MinhaVPC`
+   - **Subnets:** Selecione as **Subnets Privadas**
+   - **Mínimo:** `2`, **Máximo:** `3`
+4. Configure a política de escalonamento baseada na CPU (`75%`).
+5. Clique em **Create**.
+
+---
+
+### 7️⃣ Criar um Load Balancer
+1. Vá para **EC2 > Load Balancers**.
+2. Clique em **Create Load Balancer** e escolha **Application Load Balancer**.
+3. Defina:
+   - **Nome:** `WordPressALB`
+   - **VPC:** `MinhaVPC`
+   - **Subnets:** Selecione as **Subnets Públicas**
+   - **Security Group:** Permita tráfego nas portas **80 e 443**
+4. Crie um **Target Group** e associe o Auto Scaling Group.
 5. Finalize a criação.
 
 ---
-
-### **6. Configurar o Auto Scaling Group**
-
-#### **Criar um Launch Template**
-1. Vá para **Launch Templates** no console AWS e clique em **Create Launch Template**.
-2. Configure:
-   - **Name:** `wordpress-launch-template`.
-   - **User Data:** Adicione o mesmo script `user_data.sh` para configurar Docker.
-
-#### **Criar o Auto Scaling Group**
-1. Vá para **Auto Scaling Groups** e clique em **Create Auto Scaling Group**.
-2. Configure:
-   - **Launch Template:** Selecione o template criado anteriormente.
-   - **Desired Capacity:** 2.
-   - **Minimum Capacity:** 1.
-   - **Maximum Capacity:** 3.
-3. Integre o grupo ao Load Balancer criado anteriormente.
-
----
-
-### **7. Testar o Ambiente**
-1. Acesse o DNS público do Load Balancer:
-   ```
-   http://<LOAD_BALANCER_DNS>
-   ```
-2. Complete a configuração inicial do Wordpress.
-3. Verifique o Auto Scaling ajustando a carga na aplicação.
-
----
-
-## **Configurações adicionais importantes**
-Por natureza, o wordpress redireciona o acesso da rota **/wp-admin/**
-para o IP da primeira máquina onde foi feita a instalação da mesma,
-criando um comportamento indesejado onde a página do admnistrador é sempre
-acessada pela mesma instância, e caso essa instância esteja deseligada,
-retornará um erro de conexão. Para evitar esse comportamento, adicione
-as seguintes linhas no arquivo **wp-config.php:**
-
-   ```
-   define('WP_HOME', 'http://meu-load-balancer');
-   define('WP_SITEURL', 'http://meu-load-balancer');
-   ```
