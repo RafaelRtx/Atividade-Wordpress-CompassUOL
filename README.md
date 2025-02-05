@@ -138,23 +138,22 @@ services:
 2. Clique em **Create Auto Scaling Group**.
 3. Escolha:
    - **Launch Template:** Crie um Launch template com os mesmo dados da instância EC2 criada anteriormente, com o seguinte user data:
-         ```
-         #!/bin/bash
-         yum update -y
-         amazon-linux-extras enable docker
-         yum install -y docker
-         service docker start
-         usermod -a -G docker ec2-user
-         sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-         sudo chmod +x /usr/local/bin/docker-compose
-         systemctl enable Docker
-         cd /
-         mkdir efs
-         sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport {ID do seu EFS}.efs.us-east-1.amazonaws.com:/ efs
-         cd efs
-         docker-compose up
-
-         ```
+```
+#!/bin/bash
+yum update -y
+amazon-linux-extras enable docker
+yum install -y docker
+service docker start
+usermod -a -G docker ec2-user
+sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+systemctl enable Docker
+cd /
+mkdir efs
+sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport {ID do seu EFS}.efs.us-east-1.amazonaws.com:/ efs
+cd efs
+docker-compose up
+```
    - **VPC:** `MinhaVPC`
    - **Subnets:** Selecione as **Subnets Privadas**
    - **Mínimo:** `2`, **Máximo:** `3`
